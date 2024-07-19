@@ -5,8 +5,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Quiz App</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -26,12 +24,11 @@
         audio,
         iframe {
             max-width: 100%;
-            /* Đảm bảo không vượt quá chiều rộng của container */
             height: auto;
-            /* Giữ tỷ lệ hình ảnh ban đầu */
         }
 
-        input[type="text"] {
+        input[type="text"],
+        input[type="button"] {
             width: calc(100% - 22px);
             padding: 10px;
             margin-top: 5px;
@@ -92,7 +89,6 @@
         <input type="text" id="maHocVien" placeholder="Nhập mã học viên">
         <button onclick="loadQuizData()">Bắt đầu Quiz</button>
     </div>
-
     <div id="quiz" style="display: none;">
         <div id="timer"></div>
         <div id="question"></div>
@@ -109,22 +105,15 @@
         let currentQuestionIndex = 0;
         let timerInterval;
         let timeLeft;
-
         function loadQuizData() {
             const maDe = document.getElementById('maDe').value;
             const maHocVien = document.getElementById('maHocVien').value;
 
-            if (!maDe) {
-                alert('Vui lòng nhập mã đề thi');
+            if (!maDe || !maHocVien) {
+                alert('Vui lòng nhập mã đề thi và mã học viên.');
                 return;
             }
 
-            if (!maHocVien) {
-                alert('Vui lòng nhập mã học viên');
-                return;
-            }
-
-            // Gửi yêu cầu lên server để lấy dữ liệu đề thi với mã đề và mã học viên
             fetch(`https://script.google.com/macros/s/AKfycbx02e65m6R7yibC1Kt0SgH_OtXlFQf6Wv3NR5C3_aPMxgogNh0o61rR_40tt_nXnIPWUw/exec?maDe=${maDe}&userID=${maHocVien}`)
                 .then(response => response.json())
                 .then(data => {
@@ -132,10 +121,14 @@
                         alert(data.error);
                         return;
                     }
+                    if (!data.length) {
+                        alert('Không tìm thấy dữ liệu đề thi hoặc thiếu thông tin thời gian làm bài.');
+                        return;
+                    }
                     quizData = {
                         maDe: maDe,
-                        userID: maHocVien, // Lưu userID để sử dụng sau này
-                        timeLimit: 300, // 5 phút, có thể điều chỉnh
+                        userID: maHocVien,
+                        timeLimit: data[0].thoiGianLamBai || 300, // Sử dụng thời gian làm bài từ dữ liệu hoặc giá trị mặc định 300 giây
                         questions: data
                     };
                     startQuiz();
@@ -148,7 +141,8 @@
 
 
         function startQuiz() {
-            userAnswers = new Array(quizData.questions.length).fill(null);
+            // Giả sử quizData đã được tải với thông tin thời gian làm bài
+            timeLeft = parseInt(quizData.thoiGianLamBai);
             document.getElementById('start').style.display = 'none';
             document.getElementById('quiz').style.display = 'block';
             currentQuestionIndex = 0;
@@ -156,64 +150,60 @@
             startTimer();
         }
 
+
         function renderQuestion() {
             const questionContainer = document.getElementById('question');
             const q = quizData.questions[currentQuestionIndex];
 
             questionContainer.innerHTML = `<h2>Câu hỏi ${currentQuestionIndex + 1}</h2><p>${q.cauHoi}</p>`;
 
-            // Thêm video YouTube nếu có
             if (q.videoURL) {
                 const videoID = q.videoURL.split('v=')[1];
                 const embedURL = `https://www.youtube.com/embed/${videoID}`;
                 questionContainer.innerHTML += `<iframe src="${embedURL}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen style="width: 100%; height: auto;"></iframe><br>`;
             }
 
-            // Thêm hình ảnh nếu có
             if (q.imageURL) {
                 questionContainer.innerHTML += `<img src="${q.imageURL}" alt="Related image" style="max-width: 100%; height: auto;"><br>`;
             }
 
-            // Thêm âm thanh SoundCloud nếu có
             if (q.audioURL) {
                 const soundCloudEmbedURL = `https://w.soundcloud.com/player/?url=${encodeURIComponent(q.audioURL)}&color=%23ff5500&auto_play=false&hide_related=false&show_comments=true&show_user=true&show_reposts=false&show_teaser=true&visual=true`;
                 questionContainer.innerHTML += `<iframe src="${soundCloudEmbedURL}" style="width: 100%; height: 166px;" scrolling="no" frameborder="no" allow="autoplay"></iframe><br>`;
             }
 
-            // Xử lý các loại câu hỏi
             switch (q.loaiCauHoi) {
                 case 'multiple_choice':
                     q.cacLuaChon.forEach((option, index) => {
                         const checked = userAnswers[currentQuestionIndex] === option ? 'checked' : '';
                         questionContainer.innerHTML += `
-                    <label>
-                        <input type="radio" name="q${currentQuestionIndex}" value="${option}" ${checked}>
-                        ${option}
-                    </label><br>
-                `;
+                            <label>
+                                <input type="radio" name="q${currentQuestionIndex}" value="${option}" ${checked}>
+                                ${option}
+                            </label><br>
+                        `;
                     });
                     break;
                 case 'multiple_select':
                     q.cacLuaChon.forEach((option, index) => {
                         const checked = userAnswers[currentQuestionIndex] && userAnswers[currentQuestionIndex].includes(option) ? 'checked' : '';
                         questionContainer.innerHTML += `
-                    <label>
-                        <input type="checkbox" name="q${currentQuestionIndex}" value="${option}" ${checked}>
-                        ${option}
-                    </label><br>
-                `;
+                            <label>
+                                <input type="checkbox" name="q${currentQuestionIndex}" value="${option}" ${checked}>
+                                ${option}
+                            </label><br>
+                        `;
                     });
                     break;
                 case 'free_response':
                 case 'fill_in_blank':
                     const value = userAnswers[currentQuestionIndex] || '';
-                    questionContainer.innerHTML += `<input type="text" name="q${currentQuestionIndex}" value="${value}"><br>`;
+                    questionContainer.innerHTML += `<input type="text" name="q${currentQuestionIndex}" value="${value}" style="width: 100%;"><br>`;
                     break;
             }
 
             updateNavigationButtons();
         }
-
 
         function updateNavigationButtons() {
             document.getElementById('prevBtn').style.display = currentQuestionIndex > 0 ? 'inline' : 'none';
@@ -236,11 +226,11 @@
                     break;
                 case 'multiple_select':
                     let selectedOptions = Array.from(document.querySelectorAll(`input[name="q${currentQuestionIndex}"]:checked`)).map(input => input.value);
-                    userAnswers[currentQuestionIndex] = selectedOptions;
+                    userAnswers[currentQuestionIndex] = selectedOptions.length > 0 ? selectedOptions : [];
                     break;
                 case 'free_response':
                 case 'fill_in_blank':
-                    userAnswers[currentQuestionIndex] = document.querySelector(`input[name="q${currentQuestionIndex}"]`).value;
+                    userAnswers[currentQuestionIndex] = document.querySelector(`input[name="q${currentQuestionIndex}"]`).value || '';
                     break;
             }
         }
@@ -274,12 +264,22 @@
             let resultsDetails = quizData.questions.map((question, index) => {
                 const userAnswer = userAnswers[index];
                 const correctAnswer = question.dapAnDung;
-                const isCorrect = Array.isArray(correctAnswer) ?
-                    correctAnswer.sort().toString() === userAnswer.sort().toString() :
-                    correctAnswer.toLowerCase() === (userAnswer && userAnswer.toLowerCase());
+                let isCorrect;
+
+                // Kiểm tra và so sánh câu trả lời đúng
+                if (Array.isArray(correctAnswer)) {
+                    if (userAnswer && Array.isArray(userAnswer)) {
+                        isCorrect = JSON.stringify(correctAnswer.sort()) === JSON.stringify(userAnswer.sort());
+                    } else {
+                        isCorrect = false;
+                    }
+                } else {
+                    isCorrect = (userAnswer && typeof userAnswer === 'string' && userAnswer.trim().toLowerCase() === correctAnswer.trim().toLowerCase());
+                }
+
                 return `<li>Câu ${index + 1}: ${isCorrect ? 'Đúng' : 'Sai'}<br>
             Câu hỏi: ${question.cauHoi}<br>
-            Câu trả lời của bạn: ${userAnswer || 'Không có'}<br>
+            Câu trả lời của bạn: ${userAnswer ? userAnswer : 'Không có'}<br>
             Đáp án đúng: ${Array.isArray(correctAnswer) ? correctAnswer.join(', ') : correctAnswer}</li>`;
             }).join('');
 
@@ -288,7 +288,7 @@
                 method: 'POST',
                 body: JSON.stringify({
                     maDe: quizData.maDe,
-                    userID: quizData.userID,  // Sử dụng userID từ quizData
+                    userID: quizData.userID,
                     score: score,
                     answers: userAnswers
                 })
@@ -307,18 +307,22 @@
         function calculateScore() {
             let score = 0;
             quizData.questions.forEach((q, index) => {
-                const userAnswer = userAnswers[index];
+                const userAnswer = userAnswers[index]; // Không còn cần thiết để sử dụng || [] tại đây
                 const correctAnswer = q.dapAnDung;
                 let isCorrect = false;
 
                 if (Array.isArray(correctAnswer)) {
-                    // Đảm bảo rằng cả hai mảng được chuẩn hóa và so sánh như nhau
-                    const normalizedUserAnswer = userAnswer.map(a => a.trim().toLowerCase()).sort();
-                    const normalizedCorrectAnswer = correctAnswer.map(a => a.trim().toLowerCase()).sort();
-                    isCorrect = JSON.stringify(normalizedUserAnswer) === JSON.stringify(normalizedCorrectAnswer);
+                    if (!userAnswer || userAnswer.length === 0) {
+                        isCorrect = false; // Nếu không có câu trả lời, đánh dấu là sai
+                    } else {
+                        // Đảm bảo rằng mọi phần tử userAnswer đều được xử lý
+                        const normalizedUserAnswer = userAnswer.map(a => a ? a.trim().toLowerCase() : '');
+                        const normalizedCorrectAnswer = correctAnswer.map(a => a.trim().toLowerCase());
+                        isCorrect = JSON.stringify(normalizedUserAnswer.sort()) === JSON.stringify(normalizedCorrectAnswer.sort());
+                    }
                 } else {
-                    // Chuẩn hóa và so sánh câu trả lời đơn
-                    isCorrect = userAnswer.trim().toLowerCase() === correctAnswer.trim().toLowerCase();
+                    // Xử lý trường hợp câu trả lời không phải là mảng
+                    isCorrect = userAnswer && typeof userAnswer === 'string' && userAnswer.trim().toLowerCase() === correctAnswer.trim().toLowerCase();
                 }
 
                 if (isCorrect) {
@@ -327,6 +331,8 @@
             });
             return score;
         }
+
+
 
 
 

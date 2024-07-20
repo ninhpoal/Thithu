@@ -145,6 +145,7 @@ function renderQuestion() {
             questionContainer.innerHTML += `</div>`;
             break;
 
+
     }
 
     updateNavigationButtons();
@@ -181,17 +182,19 @@ function saveCurrentAnswer() {
         case 'matching':
             userAnswers[currentQuestionIndex] = [];
             document.querySelectorAll('.right-column .matching-item').forEach((item, index) => {
-                const matchedItem = item.querySelector('.matching-item');
+                const matchedItem = item.querySelector('.matching-item span');
                 if (matchedItem) {
-                    userAnswers[currentQuestionIndex][index] = parseInt(matchedItem.id.split('-')[1]);
+                    userAnswers[currentQuestionIndex][index] = matchedItem.textContent.trim();
                 } else {
                     userAnswers[currentQuestionIndex][index] = null;
                 }
             });
+            console.log(`Matching answers for question ${currentQuestionIndex}:`, userAnswers[currentQuestionIndex]);
             break;
 
     }
 }
+
 function allowDrop(event) {
     event.preventDefault();
 }
@@ -204,7 +207,9 @@ function drop(event) {
     event.preventDefault();
     const data = event.dataTransfer.getData("text");
     const draggedElement = document.getElementById(data);
-    event.target.appendChild(draggedElement);
+    if (!event.target.querySelector('.matching-item')) {
+        event.target.appendChild(draggedElement);
+    }
 }
 
 function startTimer() {
